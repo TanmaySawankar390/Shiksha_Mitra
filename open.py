@@ -1,63 +1,3 @@
-# import os
-# import google.generativeai as genai  
-# from PIL import Image  
-
-# # Configure the API
-# api_key =
-# if not api_key:
-#     raise ValueError("GOOGLE_API_KEY environment variable not set.")
-# genai.configure(api_key=api_key)
-
-# # Initialize the model
-# model = genai.GenerativeModel("gemini-1.5-flash")  
-
-# def extract_qa_from_image(image_path: str) -> list:
-#     """
-#     Extracts multiple questions and answers from an image.
-
-#     Args:
-#         image_path (str): Path to the image file.
-
-#     Returns:
-#         list: A list of dictionaries with 'question' and 'answer'.
-#     """
-#     try:
-#         image = Image.open(image_path)  # Load image
-#     except FileNotFoundError:
-#         raise FileNotFoundError(f"Image file '{image_path}' not found.")
-
-#     # Improved prompt to extract all Q&A pairs
-#     prompt = (
-#         "Extract all question-answer pairs from the image. "
-#         "Return the output in this structured format:\n"
-#         "Q1: <question>\nA1: <answer>\n"
-#         "Q2: <question>\nA2: <answer>\n"
-#         "Continue this format for all questions."
-#     )
-
-#     response = model.generate_content([prompt, image])
-
-#     if response and response.text:
-#         extracted_text = response.text.strip()
-        
-#         qa_list = []
-#         lines = extracted_text.split("\n")
-
-#         for i in range(0, len(lines) - 1, 2):  # Process two lines at a time (Q and A)
-#             if lines[i].startswith("Q") and lines[i + 1].startswith("A"):
-#                 question = lines[i].split(":", 1)[1].strip()
-#                 answer = lines[i + 1].split(":", 1)[1].strip()
-#                 qa_list.append({"question": question, "answer": answer})
-
-#         return qa_list if qa_list else [{"question": "No questions detected", "answer": "No answers detected"}]
-    
-#     return [{"question": "No questions detected", "answer": "No answers detected"}]
-
-# # Example Usage
-# image_path = "pratham.jpeg"
-# qa_list = extract_qa_from_image(image_path)
-# print(qa_list)  # Output: [{'question': 'What is Google?', 'answer': 'Google is a company...'}, {'question': 'Who founded it?', 'answer': 'Larry Page and Sergey Brin.'}]
-
 import os
 import io
 from flask import Flask, request, jsonify
@@ -82,6 +22,10 @@ genai.configure(api_key=api_key)
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return jsonify({"message": "Welcome to the API!"})
 
 def extract_qa_from_image(image):
     """
