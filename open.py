@@ -1,43 +1,152 @@
-import torch
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+# import os
+# import google.generativeai as genai  
+# from PIL import Image  
+
+# # Configure the API
+# api_key = "AIzaSyCCyxcLbVJCTFMz-vncL-YBh4cT317A2lc"
+# if not api_key:
+#     raise ValueError("GOOGLE_API_KEY environment variable not set.")
+# genai.configure(api_key=api_key)
+
+# # Initialize the model
+# model = genai.GenerativeModel("gemini-1.5-flash")  
+
+# def extract_qa_from_image(image_path: str) -> list:
+#     """
+#     Extracts multiple questions and answers from an image.
+
+#     Args:
+#         image_path (str): Path to the image file.
+
+#     Returns:
+#         list: A list of dictionaries with 'question' and 'answer'.
+#     """
+#     try:
+#         image = Image.open(image_path)  # Load image
+#     except FileNotFoundError:
+#         raise FileNotFoundError(f"Image file '{image_path}' not found.")
+
+#     # Improved prompt to extract all Q&A pairs
+#     prompt = (
+#         "Extract all question-answer pairs from the image. "
+#         "Return the output in this structured format:\n"
+#         "Q1: <question>\nA1: <answer>\n"
+#         "Q2: <question>\nA2: <answer>\n"
+#         "Continue this format for all questions."
+#     )
+
+#     response = model.generate_content([prompt, image])
+
+#     if response and response.text:
+#         extracted_text = response.text.strip()
+        
+#         qa_list = []
+#         lines = extracted_text.split("\n")
+
+#         for i in range(0, len(lines) - 1, 2):  # Process two lines at a time (Q and A)
+#             if lines[i].startswith("Q") and lines[i + 1].startswith("A"):
+#                 question = lines[i].split(":", 1)[1].strip()
+#                 answer = lines[i + 1].split(":", 1)[1].strip()
+#                 qa_list.append({"question": question, "answer": answer})
+
+#         return qa_list if qa_list else [{"question": "No questions detected", "answer": "No answers detected"}]
+    
+#     return [{"question": "No questions detected", "answer": "No answers detected"}]
+
+# # Example Usage
+# image_path = "pratham.jpeg"
+# qa_list = extract_qa_from_image(image_path)
+# print(qa_list)  # Output: [{'question': 'What is Google?', 'answer': 'Google is a company...'}, {'question': 'Who founded it?', 'answer': 'Larry Page and Sergey Brin.'}]
+
+import os
+import io
+from flask import Flask, request, jsonify
+import google.generativeai as genai
 from PIL import Image
+from dotenv import load_dotenv
 
-# Load the pretrained model and processor
-processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
-model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-large-handwritten")
+# Configure the API
+load_dotenv()
 
-# Load and preprocess the image
-image_path = "handwritten_sample.jpeg"  # Replace with your image file
-image = Image.open(image_path).convert("RGB")
-mage = image.resize((384, 384))
+# Fetch API key from environment variables
+api_key = os.getenv("GOOGLE_API_KEY")
 
-# Convert image to tensor
-pixel_values = processor(image, return_tensors="pt").pixel_values
+# Check if API key is found
+if not api_key:
+    raise ValueError("GOOGLE_API_KEY not found in .env file.")
 
-# Generate text output
-with torch.no_grad():
-    generated_ids = model.generate(
-    pixel_values,
-    max_length=50,  # Limit output length
-    num_beams=5,  # Use beam search for better accuracy
-    early_stopping=True  # Stop when the model finds a confident result
-)
+# Configure the API
+genai.configure(api_key=api_key)
 
-# Decode the text
-extracted_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-print("Extracted Handwritten Text:\n", extracted_text)
-# from PIL import Image
-# import pytesseract
+# Initialize the model
+model = genai.GenerativeModel("gemini-1.5-flash")
 
-# # Set Tesseract path
-# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-# # Load image
-# image_path = "handwritten_sample1.jpeg"
-# image = Image.open(image_path)
+app = Flask(__name__)
 
-# # Extract text
-# extracted_text = pytesseract.image_to_string(image)
+def extract_qa_from_image(image):
+    """
+    Extracts multiple questions and answers from an image.
 
-# print("Extracted Handwritten Text:\n", extracted_text)
+    Args:
+        image (PIL.Image): Image object.
 
+    Returns:
+        list: A list of dictionaries with 'question' and 'answer'.
+    """
+    # Prompt to ensure structured output
+    prompt = (
+        "Extract all question-answer pairs from the image. "
+        "Return the output in this structured format:\n"
+        "Q1: <question>\nA1: <answer>\n"
+        "Q2: <question>\nA2: <answer>\n"
+        "Continue this format for all questions."
+    )
 
+    response = model.generate_content([prompt, image])
+
+    if response and response.text:
+        extracted_text = response.text.strip()
+        qa_list = []
+        lines = extracted_text.split("\n")
+
+        for i in range(0, len(lines) - 1, 2):  # Process two lines at a time (Q and A)
+            if lines[i].startswith("Q") and lines[i + 1].startswith("A"):
+                question = lines[i].split(":", 1)[1].strip()
+                answer = lines[i + 1].split(":", 1)[1].strip()
+                qa_list.append({"question": question, "answer": answer})
+
+        return qa_list if qa_list else [{"question": "No questions detected", "answer": "No answers detected"}]
+
+    return [{"question": "No questions detected", "answer": "No answers detected"}]
+
+@app.route('/extract_qa', methods=['POST'])
+def extract_qa():
+    """
+    API endpoint to extract Q&A pairs from an image.
+
+    Supports:
+    - Image upload via 'image' field (multipart/form-data)
+    - Image path via JSON { "image_path": "path/to/image.jpg" }
+    """
+    # Handle image upload
+    if 'image' in request.files:
+        image_file = request.files['image']
+        image = Image.open(io.BytesIO(image_file.read()))
+        qa_list = extract_qa_from_image(image)
+        return jsonify({"questions_answers": qa_list}), 200
+
+    # Handle image path
+    if request.is_json:
+        data = request.get_json()
+        if "image_path" in data:
+            image_path = data["image_path"]
+            if not os.path.exists(image_path):
+                return jsonify({"error": "Image file not found"}), 400
+            image = Image.open(image_path)
+            qa_list = extract_qa_from_image(image)
+            return jsonify({"questions_answers": qa_list}), 200
+
+    return jsonify({"error": "No valid image provided"}), 400
+
+if __name__ == '__main__':
+    app.run(debug=True)
